@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "lambda:create": "./node_modules/claudia/bin/cmd.js create --name cognitoLoginExample --region ap-northeast-1 --handler index.handler",
+    "lambda:update": "./node_modules/claudia/bin/cmd.js update",
+    "lambda:destroy": "./node_modules/claudia/bin/cmd.js destroy",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "patw0929 (patw.hi@gmail.com)",
