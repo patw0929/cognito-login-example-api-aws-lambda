@@ -1,8 +1,3 @@
-/**
- * cognito test
- *
- */
-
 const jwt = require('jsonwebtoken');
 const async = require('async');
 const axios = require('axios');
@@ -17,18 +12,12 @@ AWS.config.region = 'ap-northeast-1';
 const cognitoidentity = new AWS.CognitoIdentity();
 const cognitosync = new AWS.CognitoSync();
 const iss = 'https://cognito-identity.amazonaws.com';
-let identityId = null;
-
 const jwks = {
   cognito: 'https://cognito-identity.amazonaws.com/.well-known/jwks_uri',
-  'accounts.google.com': 'https://accounts.google.com/.well-known/openid-configuration',
-  'graph.facebook.com': '',
 };
 
-let pems;
-
 /**
- * Records を Object に変換
+ * Convert object to dataset format
  */
 const parseData = (rec) => {
   const obj = {};
@@ -40,12 +29,16 @@ const parseData = (rec) => {
   return obj;
 };
 
-const checkJwt = () => {
+/**
+ * Download JWT key
+ */
+const downloadKey = (provider) => {
   return new Promise((resolve, reject) => {
+    const url = jwks[provider];
     // Download the JWKs and save it as PEM
-    axios.get(`${iss}/.well-known/jwks_uri`).then(response => {
+    axios.get(url).then(response => {
       if (response.status === 200) {
-        pems = {};
+        const pems = {};
 
         const keys = response.data.keys;
 
@@ -65,7 +58,6 @@ const checkJwt = () => {
           pems[key_id] = pem;
         }
 
-        console.log(pems, 'pems');
         resolve(pems);
       }
     }).catch(error => {
@@ -76,67 +68,9 @@ const checkJwt = () => {
 };
 
 /**
- * 認証情報がない場合はUnauthenticated Userを作成
- */
-// const createUser = data => {
-//   return new Promise(resolve => {
-//     AWS.config.credentials = new AWS.CognitoIdentityCredentials({
-//       IdentityId: identityId,
-//       IdentityPoolId: IDENTITY_POOLID
-//     });
-
-//     AWS.config.credentials.get(err => {
-//       if (err) {
-//         resolve({ success: false });
-
-//         return;
-//       }
-//       identityId = AWS.config.credentials.identityId;
-
-//       resolve({
-//         identityId: identityId
-//       });
-//     });
-//   });
-// }
-
-
-/**
- * Developer Authenticated 認証
- */
-const authUser = ({ accessToken, principalId, provider }) => {
-  return new Promise(resolve => {
-    // ここで外部認証処理...
-    setTimeout(() => {
-      // 結果を保持する
-      const params = {
-        IdentityPoolId: IDENTITY_POOLID,
-        IdentityId: principalId,
-        Logins: {
-          [provider]: accessToken,
-        }
-      };
-
-      cognitoidentity.getOpenIdTokenForDeveloperIdentity(params, (err, res) => {
-        if (err) {
-          resolve({ success: false });
-
-          return;
-        }
-
-        identityId = res.IdentityId;
-        resolve(res);
-      });
-
-    }, 500);
-  });
-};
-
-
-/**
  * List store Data
  */
-const listData = data => {
+const listData = ({ identityId, profile }) => {
   return new Promise(resolve => {
     if (!identityId) {
       resolve({
@@ -158,22 +92,22 @@ const listData = data => {
         return;
       }
 
-      console.log(parseData(res.Records));
+      console.log('res', res);
+      console.log('parsedData', parseData(res.Records));
 
-      resolve(res);
+      resolve({ data: res, identityId, profile });
     });
   });
 };
 
-
 /**
- * add store Data
+ * add store data
  */
-const addData = data => {
+const addData = ({ data, identityId, profile }) => {
   return new Promise(resolve => {
     if (!identityId) {
       resolve({
-        success: false
+        success: false,
       });
 
       return;
@@ -185,10 +119,30 @@ const addData = data => {
       IdentityPoolId: IDENTITY_POOLID,
       SyncSessionToken: data.SyncSessionToken,
       RecordPatches: [{
-        Key: 'USER_ID',
+        Key: 'facebookId',
         Op: 'replace',
         SyncCount: data.DatasetSyncCount,
-        Value: 'aaaaaaaaaaaaa'
+        Value: profile.id,
+      }, {
+        Key: 'name',
+        Op: 'replace',
+        SyncCount: data.DatasetSyncCount,
+        Value: profile.name,
+      }, {
+        Key: 'gender',
+        Op: 'replace',
+        SyncCount: data.DatasetSyncCount,
+        Value: profile.gender,
+      }, {
+        Key: 'email',
+        Op: 'replace',
+        SyncCount: data.DatasetSyncCount,
+        Value: profile.email,
+      }, {
+        Key: 'birthday',
+        Op: 'replace',
+        SyncCount: data.DatasetSyncCount,
+        Value: profile.birthday,
       }],
     };
 
@@ -199,125 +153,169 @@ const addData = data => {
         return;
       }
 
-      resolve(parseData(data.Records));
+      resolve({
+        userData: parseData(data.Records),
+        success: true,
+        identityId,
+      });
     });
   });
 }
 
-const ValidateToken = (pems, event, context) => {
-  const token = event.authorizationToken;
+/**
+ * Validate token
+ */
+const validateToken = (pems, event, context) => {
+  return new Promise((resolve, reject) => {
+    const token = event.openIdToken;
 
-  // Fail if the token is not jwt
-  const decodedJwt = jwt.decode(token, { complete: true });
+    // Fail if the token is not jwt
+    const decodedJwt = jwt.decode(token, { complete: true });
 
-  console.log(decodedJwt);
+    console.log(decodedJwt, 'jwt');
 
-  if (!decodedJwt) {
-    console.log("Not a valid JWT token");
-    context.fail("Unauthorized");
-    return;
-  }
+    if (!decodedJwt) {
+      reject('Not a valid JWT token');
 
-  // Fail if token is not from your User Pool
-  if (decodedJwt.payload.iss !== iss) {
-    console.log("invalid issuer");
-    context.fail("Unauthorized");
-    return;
-  }
+      return;
+    }
 
-  //Reject the jwt if it's not an 'Access Token'
-  // if (decodedJwt.payload.token_use != 'access') {
-  //   console.log("Not an access token");
-  //   context.fail("Unauthorized");
-  //   return;
-  // }
+    // Fail if token is not from your User Pool
+    if (decodedJwt.payload.iss !== iss) {
+      reject('invalid issuer');
 
-  // Get the kid from the token and retrieve corresponding PEM
-  const kid = decodedJwt.header.kid;
-  const pem = pems[kid];
-  if (!pem) {
-    console.log('Invalid access token');
-    context.fail("Unauthorized");
-    return;
-  }
+      return;
+    }
 
-  // Verify the signature of the JWT token to ensure it's really coming from your User Pool
-  jwt.verify(token, pem, { issuer: iss }, (err, payload) => {
-    if (err) {
-      context.fail('Unauthorized');
-    } else {
-      const principalId = payload.sub;
-      const provider = payload.amr && payload.amr[1];
-      const accessToken = event.accessToken;
+    // Get the kid from the token and retrieve corresponding PEM
+    const kid = decodedJwt.header.kid;
+    const pem = pems[kid];
 
-      if (!principalId || !provider || !accessToken) {
-        console.log('Wrong token or no access token.');
-        context.fail('Wrong token or no access token.');
+    if (!pem) {
+      reject('Invalid access token');
+
+      return;
+    }
+
+    // Verify the signature of the JWT token to ensure it's really coming from your User Pool
+    jwt.verify(token, pem, { issuer: iss }, (err, payload) => {
+      if (err) {
+        reject('Unauthorized');
+
+        return;
+      } else {
+        const principalId = payload.sub;
+        const provider = payload.amr && payload.amr[1];
+        const accessToken = event.accessToken;
+
+        console.log(payload, 'payload');
+        console.log(accessToken, 'accessToken');
+
+        if (!principalId || !provider || !accessToken) {
+          reject('Wrong token or no access token.');
+        } else {
+          // Using access token to retrieve user profile and save it with identityId in aws cognito
+          resolve({ principalId, provider, accessToken });
+        }
+
+        return;
       }
+    });
+  });
+};
 
-      // Using access token to retrieve user profile and save it with identityId in aws cognito
+/**
+ * Retrieve SNS user profile
+ */
+const retrieveProfile = (provider, accessToken) => {
+  console.log(provider, accessToken);
 
+  return new Promise((resolve, reject) => {
+    if (provider === 'accounts.google.com') {
+      axios.get(`https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=${accessToken}`)
+        .then(response => {
+          if (response.status === 200) {
+            const profile = response.data;
+
+            resolve({
+              name: profile.name,
+              email: profile.email,
+            });
+          } else {
+            reject(response.status);
+          }
+        })
+        .catch(error => {
+          reject(`Retrieve google user data failed! ${error}`);
+        });
+    } else if (provider === 'graph.facebook.com') {
+      axios.get(`https://graph.facebook.com/v2.9/me?fields=id%2Cname%2Cbirthday%2Cgender&access_token=${accessToken}`)
+        .then(response => {
+          if (response.status === 200) {
+            const profile = response.data;
+
+            resolve({
+              name: profile.name,
+              facebookId: profile.id,
+              birthday: profile.birthday,
+              gender: profile.gender,
+              email: profile.email,
+            });
+          } else {
+            reject(response.status);
+          }
+        })
+        .catch(error => {
+          reject('error');
+        });
+    } else {
+      reject('Unknown provider');
     }
   });
 };
 
-exports.handler = function (event, context) {
+exports.handler = (event, context) => {
   const query = event || {};
 
-  if (!event.accessToken || !event.authorizationToken) {
-    context.fail('Please input accessToken & authorizationToken completely.');
+  if (!event.accessToken || !event.openIdToken) {
+    context.fail('Please input accessToken & openIdToken completely.');
   }
 
-  if (!pems) {
-    checkJwt().then(pems => {
-      ValidateToken(pems, event, context);
-    }).catch(error => {
-      context.fail(error);
-    });
-  } else {
-    ValidateToken(pems, event, context);
-  }
+  // Download Cognito's JWT first
+  downloadKey('cognito').then(pems => {
+    // Validate token
+    validateToken(pems, event, context)
+      .then(response => {
+        const provider = response.provider;
+        const accessToken = response.accessToken;
+        const principalId = response.principalId;
 
+        console.log(response, 'response');
 
+        retrieveProfile(provider, accessToken)
+          .then(profile => {
+            console.log(profile);
 
-  // //認証情報ない
-  // if (!query.identityId && !query.appId) {
-  //   createUser().then(res => {
-  //     context.succeed(res);
-  //   });
-
-  //   return;
-  // }
-
-  // // appIdがない
-  // if (!query.appId) {
-  //   identityId = query.identityId;
-  //   createUser().then(listData)
-  //     .then(addData)
-  //     .then(res => {
-  //       context.succeed({
-  //         identityId: identityId,
-  //         userdata: res
-  //       });
-  //     });
-
-  //   return;
-  // }
-
-  // if (query.identityId) {
-  //   identityId = query.identityId;
-  // }
-
-  // console.log('190', identityId);
-
-  // authUser({
-  //   user: query.appId
-  // }).then(listData)
-  //   .then(addData)
-  //   .then(res => {
-  //     context.succeed({
-  //       identityId: identityId,
-  //       userdata: res
-  //     });
-  //   });
+            listData({
+              identityId: principalId,
+              profile,
+            })
+            .then(addData)
+            .then(res => {
+              context.succeed(res);
+            });
+          })
+          .catch(err => {
+            console.log(err);
+            context.fail('retrieve profile error', err);
+          });
+      })
+      .catch(error => {
+        console.log('validate token error', error);
+        context.fail(error);
+      });
+  }).catch(error => {
+    console.log('download key error', error);
+    context.fail(error);
+  });
 };
