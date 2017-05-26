@@ -1,0 +1,7 @@
+{
+  "lambda": {
+    "role": "cognitoLoginExample-executor",
+    "name": "cognitoLoginExample",
+    "region": "ap-northeast-1"
+  }
+}
