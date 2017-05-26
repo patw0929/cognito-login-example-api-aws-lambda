@@ -8,8 +8,6 @@ const async = require('async');
 const axios = require('axios');
 const jwkToPem = require('jwk-to-pem');
 const AWS = require('aws-sdk');
-const passport = require('passport');
-const GoogleTokenStrategy = require('passport-google-id-token');
 
 const IDENTITY_POOLID = 'ap-northeast-1:4e86b831-da7f-47d5-8382-3d800cd28a25';
 const COGNITO_DATASET_NAME = 'userData';
