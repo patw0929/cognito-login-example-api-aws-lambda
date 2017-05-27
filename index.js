@@ -11,10 +11,6 @@ AWS.config.region = 'ap-northeast-1';
 
 const cognitoidentity = new AWS.CognitoIdentity();
 const cognitosync = new AWS.CognitoSync();
-const iss = 'https://cognito-identity.amazonaws.com';
-const jwks = {
-  cognito: 'https://cognito-identity.amazonaws.com/.well-known/jwks_uri',
-};
 
 /**
  * Convert object to dataset format
@@ -32,9 +28,9 @@ const parseData = (rec) => {
 /**
  * Download JWT key
  */
-const downloadKey = (provider) => {
+const downloadKey = () => {
   return new Promise((resolve, reject) => {
-    const url = jwks[provider];
+    const url = 'https://cognito-identity.amazonaws.com/.well-known/jwks_uri';
     // Download the JWKs and save it as PEM
     axios.get(url).then(response => {
       if (response.status === 200) {
@@ -167,6 +163,7 @@ const addData = ({ data, identityId, profile }) => {
  */
 const validateToken = (pems, event, context) => {
   return new Promise((resolve, reject) => {
+    const iss = 'https://cognito-identity.amazonaws.com';
     const token = event.openIdToken;
 
     // Fail if the token is not jwt
@@ -282,7 +279,7 @@ exports.handler = (event, context) => {
   }
 
   // Download Cognito's JWT first
-  downloadKey('cognito').then(pems => {
+  downloadKey().then(pems => {
     // Validate token
     validateToken(pems, event, context)
       .then(response => {
