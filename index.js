@@ -164,7 +164,7 @@ const addData = ({ data, identityId, profile }) => {
 const validateToken = (pems, event, context) => {
   return new Promise((resolve, reject) => {
     const iss = 'https://cognito-identity.amazonaws.com';
-    const token = event.openIdToken;
+    const token = JSON.parse(event.body).openIdToken;
 
     // Fail if the token is not jwt
     const decodedJwt = jwt.decode(token, { complete: true });
@@ -203,7 +203,7 @@ const validateToken = (pems, event, context) => {
       } else {
         const principalId = payload.sub;
         const provider = payload.amr && payload.amr[1];
-        const accessToken = event.accessToken;
+        const accessToken = JSON.parse(event.body).accessToken;
 
         console.log(payload, 'payload');
         console.log(accessToken, 'accessToken');
@@ -273,9 +273,16 @@ const retrieveProfile = (provider, accessToken) => {
 
 exports.handler = (event, context) => {
   const query = event || {};
+  const bodyData = JSON.parse(event.body);
 
-  if (!event.accessToken || !event.openIdToken) {
-    context.fail('Please input accessToken & openIdToken completely.');
+  if (!bodyData.accessToken || !bodyData.openIdToken) {
+    const result = {
+      statusCode: 500,
+      headers: {},
+      body: JSON.stringify({ error: 'Please input accessToken & openIdToken completely.' }),
+    };
+
+    context.fail(result);
   }
 
   // Download Cognito's JWT first
@@ -299,20 +306,47 @@ exports.handler = (event, context) => {
             })
             .then(addData)
             .then(res => {
-              context.succeed(res);
+              const result = {
+                statusCode: 200,
+                headers: {},
+                body: JSON.stringify(res),
+              };
+
+              context.succeed(result);
             });
           })
-          .catch(err => {
-            console.log(err);
-            context.fail('retrieve profile error', err);
+          .catch(error => {
+            console.log('retrieve profile error', error);
+
+            const result = {
+              statusCode: 500,
+              headers: {},
+              body: JSON.stringify({ error }),
+            };
+
+            context.fail(result);
           });
       })
       .catch(error => {
         console.log('validate token error', error);
-        context.fail(error);
+
+        const result = {
+          statusCode: 401,
+          headers: {},
+          body: JSON.stringify({ error }),
+        };
+
+        context.fail(result);
       });
   }).catch(error => {
     console.log('download key error', error);
-    context.fail(error);
+
+    const result = {
+      statusCode: 500,
+      headers: {},
+      body: JSON.stringify({ error }),
+    };
+
+    context.fail(result);
   });
 };
