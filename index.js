@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const async = require('async');
 const axios = require('axios');
 const jwkToPem = require('jwk-to-pem');
 const AWS = require('aws-sdk');
