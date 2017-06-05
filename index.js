@@ -228,22 +228,24 @@ const retrieveProfile = (provider, accessToken) => {
 
   return new Promise((resolve, reject) => {
     if (provider === 'accounts.google.com') {
-      axios.get(`https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=${accessToken}`)
-        .then(response => {
-          if (response.status === 200) {
-            const profile = response.data;
+      axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }).then(response => {
+        if (response.status === 200) {
+          const profile = response.data;
 
-            resolve({
-              name: profile.name,
-              email: profile.email,
-            });
-          } else {
-            reject(response.status);
-          }
-        })
-        .catch(error => {
-          reject(`Retrieve google user data failed! ${error}`);
-        });
+          resolve({
+            name: profile.name,
+            email: profile.email,
+          });
+        } else {
+          reject(response.status);
+        }
+      }).catch(error => {
+        reject(`Retrieve google user data failed! ${error}`);
+      });
     } else if (provider === 'graph.facebook.com') {
       axios.get(`https://graph.facebook.com/v2.9/me?fields=id%2Cname%2Cbirthday%2Cgender&access_token=${accessToken}`)
         .then(response => {
