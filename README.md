@@ -11,6 +11,6 @@ Please refer to this article (Chinese):
 
 [使用 REACT NATIVE 與 AMAZON COGNITO 實作 GOOGLE & FACEBOOK 登入的功能](http://blog.patw.me/archives/1372/using-react-native-and-amazon-cognito-to-develop-google-facebook-login-feature-in-android-ios-app/)
 
-## Related project:
+## Related project
 
 [React-Native Cognito Login Example App](https://github.com/patw0929/react-native-cognito-login-example)
